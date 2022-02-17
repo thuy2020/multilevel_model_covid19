@@ -1,0 +1,226 @@
+---
+title: "Political Capital in Controlling Covid-19 - Data Wrangling"
+author: "Thuy Nguyen"
+date: "2/25/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(data360r)
+library(tidyr)
+library(stringr)
+library(lubridate)
+library(rio)
+library(here)
+```
+
+
+# Death outcome
+```{r}
+# download January 22, 2022, at 07.30 am, from here: global data https://github.com/lin-lab/COVID19-Rt/blob/master/initial_estimates/README.md
+#https://content.sph.harvard.edu/xlin/
+#death: accumulated 
+#deathIncrease: number of death increase by each day
+
+# Other source from https://ourworldindata.org/coronavirus-source-data
+#https://github.com/owid/covid-19-data/blob/master/public/data/owid-covid-data.csv
+
+# Follow Johns Hopkins: calculate death per 100K population 
+# https://coronavirus.jhu.edu/data/mortality
+
+#why NOT partition in pandemic waves? because there's no clear cut point:
+#https://www.yalemedicine.org/news/covid-19-variants-of-concern-omicron
+death_outcome <- rio::import(here::here("data", "jhu_global_rt_downloadedjan22_2022.tsv")) %>% 
+  select(date, Country_Region, death, deathIncrease, iso2, iso3, population) %>% 
+  filter(date <= "2021-12-31") %>% 
+  
+  # normalize death number
+  mutate(death_100Kpop = round((death/population)*100000, 2), 
+         death_insrease_day_100Kpop = round((deathIncrease/population)*100000, 2)) %>% 
+
+
+  # adding timepoint  
+  mutate(date = as.POSIXct(date),
+    quarter = quarter(date, with_year = TRUE),
+    
+    # approach 1: collapse March 2020 into second quarter
+   quarter = ifelse(quarter == "2020.1", "2020.2", quarter)) %>% 
+  
+  # approach 2: exclude March 2020, starting time point from April 2020 
+   # filter(quarter != "2020.1") %>% 
+  
+    mutate(time = case_when( quarter == "2020.2"  ~ 0, 
+                             quarter == "2020.3" ~ 1,
+                             quarter == "2020.4" ~ 2,
+                             quarter == "2021.1" ~ 3,
+                             quarter == "2021.2" ~ 4,
+                             quarter == "2021.3" ~ 5,
+                             quarter == "2021.4" ~ 6)
+            
+           ) %>% 
+  
+  # compute outcome: mean death each quarter by country
+  group_by(iso3, time) %>% 
+  mutate(death_mean_quarter = mean(death_100Kpop, na.rm = TRUE)) %>% 
+  
+  
+  select(-c(population, date, quarter, death, deathIncrease)) %>% arrange(Country_Region) 
+
+
+summary(death_outcome)
+
+# view 1 case
+# death_outcome %>%
+#   filter(Country_Region == "US")
+
+
+```
+
+
+
+# Global Health Security Index
+```{r Global Health Security Index}
+# Global Health Security Index: 195 obs
+health_index <- rio::import(here::here("data", "Global Health Security Index 2019 Final (October 2019).csv"), skip = 15) %>% 
+  select(Country, `Score / 100`) %>% 
+  rename("health_index" = `Score / 100`) 
+head(health_index)
+```
+
+Dataset: 
+“The EIU Democracy Index provides a snapshot of the state of world democracy for 165 independent states and two territories. The Democracy Index is based on five categories: electoral process and pluralism; civil liberties; the functioning of government; political participation; and political culture. Based on their scores on 60 indicators within these categories, each country is then itself classified as one of four types of regime: full democracy; flawed democracy; hybrid regime; and authoritarian regime.” (Intro by the Economist, https://www.eiu.com/topic/democracy-index)
+
+# Democracy
+```{r democracy}
+#Dataset here: https://www.gapminder.org/data/documentation/democracy-index/
+# 167 obs
+democracy <- rio::import(here::here("data", "_EIU-Democracy Indices - Dataset - v3.xlsx"), sheet = "data-for-countries-etc-by-year") %>%   filter(time == 2019) %>% 
+  select(-c(time,`Electoral pluralism index (EIU)`, `Change in democracy index (EIU)`)) %>%    # 167 
+  mutate(geo = str_to_upper(geo)) %>% 
+
+rename("democracy" = `Democracy index (EIU)`, 
+           "gov_index" = `Government index (EIU)`, 
+           "pol_participation" = `Political participation index(EIU)`, 
+           "pol_culture" = `Political culture index (EIU)`,
+          "civil_liberty" = `Civil liberties index (EIU)`, 
+       "iso3" = geo) %>% drop_na()
+       
+head(democracy)
+#democracy %>% filter(name == "United States")
+```
+
+# Goverment Effectiveness, Corruption & GDP per capita  
+```{r gdp_percap, Professional Public Administration}
+# Data from Worldbank - search for dataset 
+df_datasets <- get_metadata360(metadata_type = 'datasets') %>% 
+  filter(title == "Quality of Govt" |
+        title == "World Development Indicators" ) 
+
+# get world_development_indicators id = 56
+
+gdp_percap <- get_data360(dataset_id = 56) %>% 
+  select(c(`Country ISO3`, `Country Name`, Indicator, `2017`)) %>% 
+  filter(Indicator =="GDP per capita (current US$)") %>% 
+  rename("gdp_percap" = `2017`,
+         "iso3" = `Country ISO3`) %>% 
+  select(-Indicator) 
+
+# get Quality of Govt 88
+
+gov_effectiveness_corruption <- get_data360(dataset_id = 88) %>% 
+select(c(`Country ISO3`, `Country Name`, Indicator, `2019`)) %>%
+  
+  filter(Indicator == "Government Effectiveness, Estimate" |
+        Indicator == "Control of Corruption, Estimate") %>%   # 190
+  pivot_wider(names_from = Indicator,
+              values_from = `2019`) %>% 
+
+ rename("control_corruption" = `Control of Corruption, Estimate`, 
+          "gov_eff" = `Government Effectiveness, Estimate`,
+        "iso3" = `Country ISO3`) 
+
+# May consider other indicators:
+# Indicator == "Control of Corruption, Estimate"| #190
+# indicators <- c("Government Effectiveness, Estimate",
+# "Political corruption index",
+# "Overall Governance",
+# "Corruption Perceptions Index",
+# "Human Development Index",
+# "Control of Corruption, Estimate",
+# )
+
+```
+
+# Federal vs. Unitary States / System of Internal Governance 
+```{r federal_states}
+
+#https://cs.mcgill.ca/~rwest/wikispeedia/wpcd/wp/l/List_of_countries_by_system_of_government.htm
+federal <- c("Argentina", "Australia", "Austria", "Belgium", "Bosnia and Herzegovina", "Brazil", "Canada", "Comoros", "Ethiopia", "Micronesia", "Germany", "India", "Malaysia", "Mexico", "Nigeria", "Pakistan", "Palau", "Papua New Guinea", "Russia", "Saint Kitts and Nevis", "South Africa", "Switzerland", "United Arab Emirates", "United States", "Venezuela")  # exception: I'm not clear palau is a unitary or federal state 
+
+#States in which central government has delegated a part of its power to regional and local level governments.  China is special case. Although Hong Kong and Macau have some economic autonomy, I categorize China as unitary state in this study to reflect the fact that China had highly centralized power of pandemic control. 
+
+semi_federal <- c("Spain", "United Kingdom", "Chile", "Italy", "New Zealand", "Philippines", "Serbia", "Denmark", "Finland", "Netherlands", "France")
+
+non_unitary <- c(federal, semi_federal)
+```
+# Trust in government
+
+```{r trust}
+# trust in government https://data.oecd.org/gga/trust-in-government.htm
+trust <- import(here::here("data", "DP_LIVE_24052021010135721.csv")) %>% 
+  janitor::clean_names() %>% filter(time == 2020) %>%
+  rename("trust_gov" = value, 
+         "iso3" = location) %>% 
+  select(iso3, trust_gov) 
+
+```
+
+# Fragile States Index data from 2006-2018.
+```{r}
+#https://fragilestatesindex.org/data/
+
+fsi2019 <- import(here("data", "fsi-2019.xlsx")) %>% 
+  rename(name = Country, 
+         fragility = Total) %>% 
+  select(name, fragility)
+```
+
+# Joining data
+```{r joining data}
+data <- death_outcome %>% #distinct(Country_Region) %>% count() # 196
+    left_join(gdp_percap) %>% 
+    left_join(gov_effectiveness_corruption) %>% 
+    left_join(democracy) %>% 
+    left_join(health_index, by = c("name" = "Country")) %>% 
+    left_join(trust) %>% 
+    left_join(fsi2019) %>% 
+ 
+    select(-c(Country_Region, `Country Name`, iso2)) %>% 
+  
+# coding unitary_federal - Method 1
+    mutate(unitary_federal= case_when(name %in% federal ~ 1,
+                                      !name %in% federal ~ 0)) %>%
+
+# coding unitary_federal - Method 2
+    mutate(unitary_semi_federal= case_when(name %in% non_unitary ~ 1, 
+                                      !name %in% non_unitary ~ 0)) %>%   
+
+# limit to only some variables to be used in model
+  select(name, time, death_mean_quarter, gdp_percap, control_corruption, gov_eff, democracy, civil_liberty, health_index, unitary_federal, unitary_semi_federal, trust_gov, fragility) %>% 
+  drop_na(name) %>% 
+  distinct()
+
+
+summary(data)
+  
+saveRDS(data, "data.RDS")
+
+
+```
+
+
+
+

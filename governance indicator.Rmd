@@ -1,0 +1,147 @@
+---
+title: "Data sources used in 2020 governance indicators"
+author: "Thuy Nguyen"
+date: "12/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rio)
+library(here)
+library(tidyverse)
+library(janitor)
+```
+
+
+```{r}
+#aggregated data WGI
+wgi <- import(here("data", "wgidataset.xlsx"))
+wgi[[1]]
+```
+
+
+
+```{r}
+#African Development Bank Country Policy and Institutional Assessments (ADB)
+afdb <- import(here("data", "ADB.xlsx"))
+
+#Quality of Public Administration https://cpia.afdb.org/?page=data&subpage=database
+afdb_publicad <- import(here("data", "15_2004-2018-ADF-Data-EN.xls"))
+head(afdb_publicad)
+```
+
+
+```{r}
+#Michigan State University; Institute for Democracy (South Africa); Centre for Democracy and Development (Ghana).
+#Get 2 variables: Handling improving basic health services and Trust parliament/national assembly
+afr <- import(here("data", "AFR.xlsx"), sheet = "WGI20171819")
+
+```
+
+
+```{r}
+#Asian Development Bank Country Policy and Institutional Assessments (ASD) 
+asd <- import(here("data", "ASD.xlsx"), sheet = "WGI201819", skip = 1) %>% 
+  # select the rescale cols
+  select(`...1`, `...2`, `Transparency, Accountability & Corruption \r\nin the Public Sector...19`, `Quality of Public Administration...20`)
+
+```
+
+																		
+```{r}
+# Business Environment and Enterprise Performance Survey (BPS) 
+# This survey, part of the Enterprise Survey project of the World Bank, collects a wide range of data on firms' financial performance and their perceptions of the regulatory and investment climate.  We use data from this source for 2000-2015.  Starting with the 2017 update of the WGI, this data source will no longer be included in the WGI (for calendar year 2016 onwards) as this source is no longer being updated sufficiently frequently for inclusion in the WGI.
+
+```
+
+```{r}
+# Bertelsmann Foundation, Nongovernmental organization headquartered in Berlin, Germany, with goal to study social challenges and problems and propose solutions.
+bti <- import(here("data", "BTI.xlsx"), sheet = "WGI1819", skip = 1) %>% 
+  select(`...1`, `...2`, `Political Participation...21`, `Institutional Stability/ Stability of Democratic Institutions...22`, `Political and Social Integration...23`, `Consensus Building...24`, `Steering Capability...25`, `Resource Efficiency...26`, `Rule of Law...27`)
+
+```
+
+Freedom House - only up to 2013
+CCR is a series of more detailed narrative country reports including common sets of quantitative indicators on democratic and economic issues, typically scored on a 7-point scale, based on a checklist of underlying indicators.  Note that the indicators refer to data from the previous year:  we therefore lag the data from this source by one year. Note also that in each year we either carry forward or backward CCR scores for those countries that match these criteria: 1)  first year a country appears in CCR we use data only for that year, and then carry forward if needed; 2)  if a country appears twice (or more) we carry backwards wherever possible, and then forwards from the last available year; 3) when a new data point appears for a country, we replace the previous forward-carried data with back-carried data..  Note that this source is no longer being updated by Freedom House, and so the use of the data for this source in the WGI stops in 2013.			
+
+
+EBR - no indicator for gov effectiveness
+
+```{r}
+# Economist Intelligence Unit
+# The full dataset is commercially available. The indicators range from 1 through 4 (bad).  Only the averages of subindicators are publicly available in this spreadsheet.  Democracy index is publicly available,and ranges from 0 through 10 (good). 	
+# include 183 countries
+# Need this indicators: AAccountability of Public Officials, Quality of bureaucracy / institutional effectiveness, Excessive bureaucracy / red tape
+#Network of over 500 correspondents, reviewed for consistency by panels of regional experts
+
+eiu <- import(here("data", "EIU.xlsx"), sheet = "MERGEPublic") 
+
+```
+																					
+```{r}
+#Freedom House (FRH), 192 countries
+frh <- import(here("data", "FRH.xlsx"), sheet = "WGI2019", skip = 1) %>% 
+  select(`...1`, `...2`, `Political Rights (FRW)...21`, `Civil Liberty Rights (FRW)...22`, `Freedom of the Net (FOTN)...23`,`Media (NIT)`, `Civil Society (NIT)...27`)
+
+```
+
+```{r}
+#Transparency International Global Corruption Barometer (GCB)
+# Households
+# Experiential Question: Have you paid a bribe to any of 6 services (public schools, hospitals, identification document, utilities, police, courts)? (Conditional on having contacted institution) 
+# year 2019 has too few countries --> use 2018?
+gcb <- import(here("data", "GCB.xlsx"), sheet = "WGI2019", skip = 1) %>% 
+  select(`...1`, `...2`, `Experiential Question: Have you paid a bribe to any of 6 services (public schools, hospitals, identification document, utilities, police, courts)? (Conditional on having contacted institution)...18`)
+```
+
+
+```{r}
+#GCS Global Competitiveness Report (GCS)
+# Full dataset is commercially available.  Country-level averages of most variables available in the Global Competitiveness report. Averages of sub-indicators are publicly available in this spreadsheet.
+# need this: Public trust of politicians, Transparency of government policymaking, Diversion of public funds
+```
+
+
+```{r}
+# Global Integrity Index  (GII)
+# Local country experts and peer reviewers recruited by Global Integrity
+# has for several years
+gcb <- import(here("data", "GII.xlsx"), sheet = "WGI2019", skip = 2) %>% 
+  select(-c(3:101)) %>% # skip over the original cols and budget questions
+  select(`...1`, `...2`, 
+         `In practice, civil servants' work is not compromised by political interference....102`,
+         `In practice, civil servants are appointed and evaluated according to professional criteria....103`,
+         `In practice, citizen requests for public information are effective....104`,
+         `In practice, media organizations (print, broadcast, online) disclose the identities of their owners to the public....110`,
+         `In practice, journalists and editors adhere to strict, professional practices in their reporting....111`,
+         `In practice, there is no prior government restraint (pre-publication censoring) and the government doesn't promote the media's self-censorship....112`,
+         `In practice, there is no prior government restraint (pre-publication censoring) of citizen-created content online and the government doesn't promote the self-censorship of citizens online (in blogs, social media, etc.)....113`,
+         `In practice, the government does not block (or require ICT firms to block) online content....114`,
+         `In practice, the government does not create obstacles for existing non profit organizations (NGOs) or put in place barriers for establishing new ones....120`,
+         `In practice, there is a government policy/strategy to increase citizen access to the Web....136`,
+         `In practice, citizen access to the Web increased compared to the year before....137`,
+         `In practice, there is a government social safety net to assist those who can't work due to a permanent or temporary illness or health condition....142`,
+         `In practice, there is a government social safety net to compensate for unemployment....143`,
+         `In practice, citizens have access to hospitals and clinics' budget and expenditure information....144`,
+         `In practice, citizens have access to information about hospitals and clinics' services, location, and contact information....145`,
+         `In practice, there are health campaigns to educate citizens on common illnesses and prevention, and alerting them of public health hazards such as epidemics....146`
+         )
+
+gcb <- slice(gcb, 6) # take out the first 6 rows
+length(gcb$`...1`)
+```
+
+Trust in government https://data.oecd.org/gga/trust-in-government.htm
+“In this country, do you have confidence in… national government?". Answering “yes” (the other response categories being “no”, and “don’t know”)
+Cite: OECD (2021), Trust in government (indicator). doi: 10.1787/1de9675e-en (Accessed on 23 May 2021)
+
+```{r}
+
+# trust in government https://data.oecd.org/gga/trust-in-government.htm
+trust <- import(here("data", "DP_LIVE_24052021010135721.csv")) %>% 
+  clean_names() %>% filter(time == 2020) %>% 
+  select(location, time, value)
+
+```
+

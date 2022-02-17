@@ -1,0 +1,139 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lme4)
+library(lmerTest)
+library(interactions)
+library(nlme)
+library(performance)
+library(ggplot2)
+library(tidyr)
+library(tidyverse)
+library(stargazer)
+library(gghighlight)
+
+data <- readRDS("data.RDS")
+
+```
+
+
+# Create summary statistics table
+```{r}
+# report statistics: https://www.princeton.edu/~otorres/NiceOutputR.pdf
+stargazer(as.data.frame(data), type="html", summary=T, summary.logical=T, summary.stat=(c("n", "mean", "sd")),
+          #covariate.labels = c("Attend college at 23", "Years schooling at 23", "Father deceased", "Offer"),
+          notes="Notes: This table presents...",
+          digits=2, notes.append = F, title="Table 1. Descriptive Statistics", 
+          out="descriptive statistics.htm") # save to htm for easy copy to word
+```
+
+# Outcome variable
+## Check Outcome's distribution
+```{r}
+describe(data$death_mean_quarter)
+qqnorm(data$death_mean_quarter, pch = 1, frame = FALSE)
+qqline(data$death_mean_quarter, col = "blue", lwd = 2)
+```
+
+## Outcome Plot
+
+```{r death_mean_quarter}
+
+# countries started out high
+top5_started_q2_2020 <- data %>% 
+  filter(time == 0) %>% 
+  arrange(desc(death_mean_quarter)) %>% 
+  head(5)
+
+belgium <- data %>% 
+  filter(name == "Belgium")
+
+spain <- data %>% 
+  filter(name == "Spain")
+
+italy <- data %>% 
+  filter(name == "Italy")
+
+peru <- data %>% 
+   filter(name == "Peru")
+
+france <- data %>% 
+   filter(name == "France")
+
+
+ggplot(data, aes(time, death_mean_quarter, group=name))+
+  geom_line(color = "grey", alpha = .8) +
+
+  # countries started out high  
+  geom_line(color = "red", data = belgium) +
+  geom_line(color = "orange", data = spain) +
+  geom_line(color = "violet", data = italy) +
+  geom_line(color = "blue", data = peru) +
+  geom_line(color = "darkgreen", data = france) +
+  
+    labs(title = "Quarter Average Covid Mortality per 100 Thousand Population\n Five countries started out with highest mortality rate", 
+         x = "Time point (The 2nd quarter 2020 ~ the 4th quarter 2021)", 
+         y = "Count of Death") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+# countries ended up high
+top5_started_q4_2021 <- data %>% 
+  filter(time == 6) %>% 
+  arrange(desc(death_mean_quarter)) %>% head(5)
+
+peru <- data %>% 
+   filter(name == "Peru")
+
+bulgaria <- data %>% 
+  filter(name == "Bulgaria")
+
+bosnia_herzegovina <- data %>% 
+  filter(name == "Bosnia and Herzegovina")
+
+macedonia <- data %>% 
+  filter(name == "Macedonia, FYR")
+           
+montenegro <- data %>% 
+  filter(name == "Montenegro")    
+
+ggplot(data, aes(time, death_mean_quarter, group=name))+
+  geom_line(color = "grey", alpha = .8) +
+
+  # countries started out high  
+  geom_line(color = "blue", data = peru) +
+  geom_line(color = "black", data = bulgaria) +
+  geom_line(color = "purple", data = bosnia_herzegovina) +
+  geom_line(color = "green", data = macedonia) +
+  geom_line(color = "brown", data = montenegro) +
+  
+    labs(title = "Quarter Average Covid Mortality per 100 Thousand Population\n Five countries with highest mortality rate by end of 2021", 
+         x = "Time point (The 2nd quarter 2020 ~ the 4th quarter 2021)", 
+         y = "Count of Death") +
+  theme_minimal()
+
+  
+```
+
+
+
+```{r}
+
+```
+
+
+
+# View Distribution of variables
+
+```{r}
+hist(data$civil_liberty)
+```
+
