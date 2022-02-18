@@ -124,16 +124,42 @@ ggplot(data, aes(time, death_mean_quarter, group=name))+
 ```
 
 
-
-```{r}
-
-```
-
-
-
 # View Distribution of variables
 
 ```{r}
 hist(data$civil_liberty)
+```
+
+# Correlation
+
+## Check for correlation among predictors
+```{r}
+library(Hmisc)
+# very high Collinearity bt civil liberty & democracy; gov_eff and control_corruption
+# -->  take out one in each pair
+data_cor <- data[, 5:14] %>% drop_na()
+cor(data_cor)
+
+# only keep those that are not so highly correlated 
+data_cor1 <- data[, c(5, 7, 8, 10, 12)] %>% drop_na()
+
+cor(data_cor1)
+```
+## calculate VIF 
+```{r}
+library(car)
+m_test_1 <- lm(democracy ~  gov_eff + gdp_percap + health_index + unitary_semi_federal + trust_gov,
+   data = data)
+summary(m_test_1)
+
+vif(m_test_1)
+```
+
+```{r}
+m_test_2 <- lm(gov_eff ~ democracy  + gdp_percap + health_index + unitary_semi_federal,
+   data = data)
+summary(m_test_2)
+
+vif(m_test_2)
 ```
 

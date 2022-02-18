@@ -1,5 +1,5 @@
 ---
-title: "Political Capital in Controlling Covid-19 - Data Wrangling"
+title: "Political Capital in Controlling Covid-19 - Data Management"
 author: "Thuy Nguyen"
 date: "2/25/2021"
 output: html_document
@@ -18,7 +18,7 @@ library(here)
 ```
 
 
-# Death outcome
+# Mortality
 ```{r}
 # download January 22, 2022, at 07.30 am, from here: global data https://github.com/lin-lab/COVID19-Rt/blob/master/initial_estimates/README.md
 #https://content.sph.harvard.edu/xlin/
@@ -80,18 +80,15 @@ summary(death_outcome)
 ```
 
 
-
 # Global Health Security Index
 ```{r Global Health Security Index}
-# Global Health Security Index: 195 obs
+# Global Health Security Index: 195 obs https://www.eiu.com/topic/democracy-index
 health_index <- rio::import(here::here("data", "Global Health Security Index 2019 Final (October 2019).csv"), skip = 15) %>% 
   select(Country, `Score / 100`) %>% 
   rename("health_index" = `Score / 100`) 
 head(health_index)
 ```
 
-Dataset: 
-“The EIU Democracy Index provides a snapshot of the state of world democracy for 165 independent states and two territories. The Democracy Index is based on five categories: electoral process and pluralism; civil liberties; the functioning of government; political participation; and political culture. Based on their scores on 60 indicators within these categories, each country is then itself classified as one of four types of regime: full democracy; flawed democracy; hybrid regime; and authoritarian regime.” (Intro by the Economist, https://www.eiu.com/topic/democracy-index)
 
 # Democracy
 ```{r democracy}
@@ -110,10 +107,11 @@ rename("democracy" = `Democracy index (EIU)`,
        
 head(democracy)
 #democracy %>% filter(name == "United States")
+summary(democracy)
 ```
 
 # Goverment Effectiveness, Corruption & GDP per capita  
-```{r gdp_percap, Professional Public Administration}
+```{r gdp_percap, gov_eff}
 # Data from Worldbank - search for dataset 
 df_datasets <- get_metadata360(metadata_type = 'datasets') %>% 
   filter(title == "Quality of Govt" |
@@ -151,7 +149,7 @@ select(c(`Country ISO3`, `Country Name`, Indicator, `2019`)) %>%
 # "Human Development Index",
 # "Control of Corruption, Estimate",
 # )
-
+summary(gov_effectiveness_corruption)
 ```
 
 # Federal vs. Unitary States / System of Internal Governance 
@@ -209,7 +207,9 @@ data <- death_outcome %>% #distinct(Country_Region) %>% count() # 196
                                       !name %in% non_unitary ~ 0)) %>%   
 
 # limit to only some variables to be used in model
-  select(name, time, death_mean_quarter, gdp_percap, control_corruption, gov_eff, democracy, civil_liberty, health_index, unitary_federal, unitary_semi_federal, trust_gov, fragility) %>% 
+  select(name, time, death_mean_quarter, gdp_percap, gov_eff, democracy, 
+         #control_corruption, civil_liberty, fragility, (high correlation with others)
+         health_index, unitary_federal, unitary_semi_federal, trust_gov) %>% 
   drop_na(name) %>% 
   distinct()
 
