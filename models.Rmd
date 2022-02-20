@@ -58,8 +58,8 @@ The model's result shows that the initial average value .
 ## 1.3 Testing nonlinear functions of time - Quadratic Unconditional Growth Model 
 
 ```{r m_timesq}
-m_timesq <- lme4::lmer(death_mean_quarter ~ time + I(time^2) + 
-                   (1 + I(time^2)|name),
+m_timesq <- lmer(death_mean_quarter ~ time + I(time^2) + 
+                   (I(time^2)|name),
                 
                  data = data, 
                  control = lmerControl(optimizer = "bobyqa", 
@@ -217,8 +217,7 @@ trust_data <- data %>% drop_na(trust_gov)
 
 length(unique(trust_data$name))
 
-m_trust <- lmer(death_mean_quarter ~ time + I(time^2) + (time|name) +
-                  gdp_percap +
+m_trust <- lmer(death_mean_quarter ~ time + I(time^2) + (time|name) + gdp_percap +
             time*trust_gov, 
           data = data, 
           control = lmerControl(optimizer = "bobyqa", 
@@ -229,9 +228,9 @@ summary(m_trust)
 
 
 
+
+
 # 3 Join model
-
-
 
 ```{r, results='asis'}
 library(huxtable)
@@ -245,98 +244,67 @@ library(broomExtra)
 
 ### Federal system
 ```{r join model, sq time}
-# unitary vs federal
-m_join_feda <- lmer(death_mean_quarter ~  time + I(time^2) + (time|name) + 
-                      log(gdp_percap) + # control for gdp
-            time*unitary_semi_federal,
-            
-          data = data, 
-          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
-
-summary(m_join_feda)
 # ==> unitary_semi_federal significant 
-m_join_fedb <- lmer(death_mean_quarter ~  time + I(time^2) + (time|name) +
+m_join_fed <- lmer(death_mean_quarter ~  time + I(time^2) + (I(time^2)|name) +
                       log(gdp_percap) + 
-                      
-            time*unitary_semi_federal +
-            time*health_index,  
-            
-          data = data, 
+                      time*unitary_semi_federal +
+                      time*scale(health_index),  
+                    data = data, 
           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
-summary(m_join_fedb)
+summary(m_join_fed)
 ```
 
 ### Democracy
 ```{r}
 
-m_join_demoa <- lmer(death_mean_quarter ~ time + I(time^2) + (time|name) + log(gdp_percap) + # control for gdp
-            time*democracy,
-          data = data, 
+m_join_demo <- lmer(death_mean_quarter ~ time + I(time^2) + (I(time^2)|name) + 
+                       log(gdp_percap) + 
+                        time*unitary_semi_federal +
+                        time*scale(health_index) +
+                        time*scale(democracy),
+                     data = data, 
           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
-m_join_demob<- lmer(death_mean_quarter ~ time + I(time^2) + (time|name) + log(gdp_percap) +
-             time*democracy +
-            time*health_index,
-            
-          data = data, 
-          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
-summary(m_join_demoa)
-summary(m_join_demob)
-
+summary(m_join_demo)
 ```
 
 ### Trust
 
 ```{r}
-m_join_trusta <- lmer(death_mean_quarter ~ time + I(time^2) + (time|name) + log(gdp_percap) +
-            time*trust_gov, 
-            
-          data = data, 
+
+m_join_trust <- lmer(death_mean_quarter ~ time + I(time^2) + (I(time^2)|name) + 
+                       log(gdp_percap) + 
+                        time*unitary_semi_federal +
+                        time*scale(health_index) +
+                        time*scale(democracy) +
+                        time*scale(trust_gov),
+                     data = data, 
           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
-m_join_trustb <- lmer(death_mean_quarter ~ time + I(time^2) + (time|name) + log(gdp_percap) +
-            time*trust_gov +
-            time*health_index,
-            
-          data = data, 
-          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+summary(m_join_trust)
 
-summary(m_join_trusta)
-summary(m_join_trustb)
 ```
 
 
 
 ```{r}
 
-m_join4 <- lmer(death_mean_quarter ~ time + I(time^2) + (time|name) + log(gdp_percap) +
+m_join5 <- lmer(death_mean_quarter ~ time + I(time^2) + (I(time^2)|name) + log(gdp_percap) + 
             time*unitary_semi_federal +
-            time*health_index +    
-            time*democracy +
-            time*trust_gov, 
-            
-          data = data, 
-          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
-
-m_join5 <- lmer(death_mean_quarter ~ time + I(time^2) + (time|name) + log(gdp_percap) + 
-            time*unitary_semi_federal +
-            time*health_index +    
-            time*democracy +
-            time*trust_gov + 
+            time*scale(health_index) +  
+            #time*health_index + 
+            time*scale(democracy) +
+            time*scale(trust_gov) +
             time*gov_eff,
           data = data, 
           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
-summary(m_join1) 
-summary(m_join1_b) 
-summary(m_join2) 
-summary(m_join3) 
-summary(m_join4)
 summary(m_join5)
 
-
+# when bringin trust_gov, --> have significant gov_eff
 ```
 
+One unit of gov_eff goes up, the rate of change in Covid death goes down by 16.3
 
 # Create table
 
@@ -376,16 +344,25 @@ Standardizing the inputs does not change model result.
 ```{r data_scale, include=FALSE}
 data_scale <- data %>%
 
-  select(-trust_gov) %>% drop_na() %>%
+ # select(-trust_gov) %>% drop_na() %>%
   mutate(gdp_percap = scale(gdp_percap),
          health_index = scale(health_index),
-         control_corruption = scale(control_corruption),
+        
          gov_eff = scale(gov_eff),
-         democracy = scale(democracy),
-         civil_liberty = scale(civil_liberty) 
+         democracy = scale(democracy)
          )
+# should scale democracy
+scale(data$democracy)[1:10]
 
+#should scale health index
+scale(data$health_index)[1:10]
 
+# gov_eff alrealy on -2.5 ~ 2.5 range. 
+data$gdp_percap[1:10]
+log(data$gdp_percap[1:10])
+```
+
+```{r}
 m_scale_inputs <- lmer(death_mean_quarter ~ I(time^2) + (1 + time|name) +
                
             time*unitary_semi_federal +

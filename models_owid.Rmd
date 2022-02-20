@@ -1,0 +1,365 @@
+---
+title: "Models"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lme4)
+library(lmerTest)
+library(interactions)
+library(nlme)
+library(performance)
+library(tidyr)
+library(jtools)
+library(broom)
+
+library(pacman)
+
+# These are the packages you will need for the analyses 
+p_load(here, tidyverse, DT, ggplot2, xaringan, knitr, kableExtra, modelsummary, stargazer, xaringanthemer, ggthemes, fixest, haven, arsenal)
+data_owid <- readRDS("data_owid.RDS")
+
+```
+
+
+# Unconditional, ICC
+```{r m0}
+m0 <- lmer(total_deaths_per_million ~ (1|name), 
+                     data = data_owid, 
+                     control = lmerControl(optimizer = "bobyqa", 
+                                           optCtrl = list(maxfun = 2e5)))
+
+summary(m0)
+icc(m0)
+```
+
+The model implies that ...% of the variance in mortality is associated with between-country differences. In other words, within a given country, mortality rate have a ... correlation. 
+
+# Linear Growth Model 
+Time was a significant predictor of mortality rate 
+```{r m_timelinear}
+m_timelinear <- lmer(total_deaths_per_million ~ time_month + (1 + time_month|name), 
+                     data = data_owid, 
+                     control = lmerControl(optimizer = "bobyqa", 
+                                           optCtrl = list(maxfun = 2e5)))
+summary(m_timelinear)
+confint(m_timelinear)
+```
+
+
+Variance among the intercepts: 
+Variance among the slopes:
+Level 1 residual variance: 
+
+The model's result shows that the initial average value .  
+
+# Quadratic Unconditional Growth Model 
+
+```{r}
+m_timesq <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name),
+                 data = data_owid, 
+                 control = lmerControl(optimizer = "bobyqa", 
+                                       optCtrl = list(maxfun = 2e5)))
+summary(m_timesq)
+```
+
+Test improvement in model fit with quadratic term. 
+
+##Visualize model fit
+https://mlm2-2021.netlify.app/slides/w6p1.html#114
+```{r }
+# NOTE: need to set REML = FALSE, because with restricted maximum likelihood (REML) estimation, likelihood ratio test can only be conducted between models that are nested in the covariance parameters. The nesting relationship includes the fixed effect, so can NOT use a likelihood ratio test to compare the models when fit by REML. --> need full-information maximum likelihood FIML.  
+
+m_timelinear_FIML <- lme4::lmer(total_deaths_per_million ~ time_month + (time_month|name), 
+                     REML = FALSE,
+                     data = data_owid, 
+                     control = lmerControl(optimizer = "bobyqa", 
+                                           optCtrl = list(maxfun = 2e5)))
+
+m_timesq_FIML <- lme4::lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name),
+                  REML = FALSE,
+                 data = data_owid, 
+                 control = lmerControl(optimizer = "bobyqa", 
+                                       optCtrl = list(maxfun = 2e5)))
+anova(m_timelinear_FIML, m_timesq_FIML)
+# result shows m_timesq is a big improvement of model fit. 
+```
+
+
+
+# Testing for Heteroscedastic Errors --> Need to account for heteroscedasticity. 
+
+```{r}
+# to override the default homoscedastic error structure for level 1 residuals, need to use nlme; Note that lme4 does not allow for testing of the homoscedasticity assumption. 
+
+m_test_homo1 <- nlme::lme(total_deaths_per_million ~ time_month + 1,
+          data = data_owid, 
+          random = ~ time_month + 1|name) # random effect of time and intercept 1 --> dependent on name
+summary(m_test_homo1)
+intervals(m_test_homo1)
+```
+
+```{r}
+m_test_homo2 <- nlme::lme(total_deaths_per_million ~ time_month + 1,
+          data = data_owid, 
+          random = ~ time_month + 1|name,   # random effect of time and intercept 1 --> dependent on name
+          control = lmeControl(opt='optim'), # to avoid LME() error - iteration limit reached
+          weights = varIdent(form =~ 1|time_month)) # allow for heteroscedastic error variance over time --> weights indicating that the residual variances is a function of time
+
+summary(m_test_homo2)
+intervals(m_test_homo2)
+```
+
+```{r}
+anova(m_test_homo1, m_test_homo2)
+```
+
+# System of Internal Governance: Unitary, Semi-federal, Federal states  
+
+```{r}
+# list of federal
+data_owid %>% 
+  filter(unitary_semi_federal == 1) %>% distinct(name) -> f1
+
+data_owid %>% 
+  filter(unitary_federal == 1) %>% distinct(name) -> f2
+
+setdiff(f1, f2) -> f3
+data_owid %>% 
+  filter(unitary_federal == 1) %>% select()
+```
+
+## Method 1: 22 federal states --> not significant
+
+```{r}
+m_unitary_federal <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) +  (time_month|name) +                                  log(gdp_percap) +
+                            time_month*scale(health_index) +
+                            
+                            time_month*unitary_federal, 
+                          data = data_owid, 
+                          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+
+summary(m_unitary_federal)
+```
+
+## Method 2: 32 federal states --> Significant
+
+In this model, the form of state organization - federal vs. unitary states - is a categorical predictor at level 2 (country level). 
+
+```{r m_unitary_federal}
+m_unitary_semi_federal <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) +  (time_month|name) + 
+                             log(gdp_percap) + 
+                            time_month*scale(health_index) + 
+                              
+                            time_month*unitary_semi_federal, 
+                          data = data_owid, 
+                          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+summary(m_unitary_semi_federal)
+```
+
+
+```{r sim_slope, unitary_federal}
+ sim_slopes(m_unitary_semi_federal, pred = time_month, modx = unitary_semi_federal, 
+            data = data_owid,
+            centered = "none", cond.int=TRUE,
+  johnson_neyman = FALSE)
+```
+
+
+```{r interact_plot, unitary_federal}
+interact_plot(m_unitary_semi_federal, pred = time_month, modx = unitary_semi_federal,
+              data = data_owid,
+ x.label = "Time point (in month)",
+ y.label = "Mortality",
+ main.title = "Covid Mortality per million population \n Federal vs. Unitary system ",
+ legend.main = "")
+
+```
+
+
+Both federal models 
+```{r}
+modelsummary(list(m_unitary_federal, m_unitary_semi_federal), 
+               title = "Table  ",
+               stars=c('*' = 0.05, '**' = 0.01, '***' = 0.001),
+               coef_omit = "(Intercept)|as.factor",
+               #coef_rename = c("health_index" = "Health Security Index"),
+               estimate = "{estimate}{stars}",
+               gof_omit= "Adj|Log|Within|AIC|BIC|FE|Std|F",
+               #add_rows = row,
+               threeparttable= T,
+               notes = c("* p < 0.05, ** p < 0.01, *** p < 0.001 Notes: Standard errors shown in parentheses."),
+               output = "federal_modelstable.docx")
+```
+
+
+# Democracy
+```{r}
+m_join_demo <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name) + 
+                       log(gdp_percap) + 
+                        time_month*scale(health_index) +
+                        
+                      time_month*unitary_semi_federal +
+                      time_month*scale(democracy),
+                     data = data_owid, 
+          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+
+summary(m_join_demo)
+```
+
+# Trust
+
+```{r}
+
+m_join_trust <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name) + 
+                       log(gdp_percap) + 
+                       
+                        time_month*unitary_semi_federal +
+                        time_month*scale(health_index) +
+                        time_month*scale(democracy) +
+                        time_month*scale(trust_gov),
+                     data = data_owid, 
+          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+
+summary(m_join_trust)
+
+```
+
+# Gove_eff - Joined model of all predictors  
+```{r}
+m_join5 <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name)  +
+                  log(gdp_percap) + 
+                  
+           time_month*unitary_semi_federal +
+           time_month*scale(health_index) +  
+           time_month*scale(democracy) +
+           time_month*scale(trust_gov) +
+           time_month*scale(gov_eff),
+          data = data_owid, 
+          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+summary(m_join5)
+```
+
+
+```{r}
+
+m_join6 <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (I(time_month^2)|name)  +
+                 # (time_month|name) + 
+                  log(gdp_percap) + 
+            I(time_month^2)*unitary_semi_federal +
+            I(time_month^2)*scale(health_index) +  
+            #time*health_index + 
+            I(time_month^2)*scale(democracy) +
+            I(time_month^2)*scale(trust_gov) +
+            I(time_month^2)*gov_eff,
+          data = data_owid, 
+          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+summary(m_join6)
+
+```
+
+One unit of gov_eff goes up, the rate of change in Covid death goes down by 16.3
+
+# Create table
+
+```{r}
+
+# Produce the table; can export to markdown, tex, etc. by changing the type
+modelsummary(list(m_timesq, m_join1, m_join2, m_join3, m_join4, m_join5), 
+               title = "Table 1. ",
+               stars=c('*' = 0.05, '**' = 0.01, '***' = 0.001),
+               coef_omit = "(Intercept)|as.factor",
+               coef_rename = c("health_index" = "Health Security Index", 
+                               "unitary_semi_federal" = "Federal system (Yes = 1)",
+                               "democracy" = "Democracy",
+                               "trust_gov" = "Trust in government",
+                               "gov_eff" = "Government Effectiveness",
+                               "log(gdp_percap)" = "GDP per capita (log)",
+                               "time" = "Time point (quarter)"
+                               ),
+               estimate = "{estimate}{stars}",
+               gof_omit= "Adj|Log|Within|AIC|BIC|FE|Std|F",
+               #add_rows = row,
+               threeparttable= T,
+               notes = c("* p < 0.05, ** p < 0.01, *** p < 0.001 Notes: Standard errors shown in parentheses."),
+               output = "modelstable.html")
+
+```
+
+# Structure Error
+
+https://bookdown.org/roback/bookdown-BeyondMLR/ch-lon.html#learning-objectives-8
+
+# 3. Other considerations (to be continued)
+
+## 3.1 Scaling inputs
+
+Standardizing the inputs does not change model result. 
+```{r data_scale, include=FALSE}
+data_scale <- data %>%
+
+ # select(-trust_gov) %>% drop_na() %>%
+  mutate(gdp_percap = scale(gdp_percap),
+         health_index = scale(health_index),
+        
+         gov_eff = scale(gov_eff),
+         democracy = scale(democracy)
+         )
+# should scale democracy
+scale(data$democracy)[1:10]
+
+#should scale health index
+scale(data$health_index)[1:10]
+
+# gov_eff alrealy on -2.5 ~ 2.5 range. 
+data$gdp_percap[1:10]
+log(data$gdp_percap[1:10])
+```
+
+```{r}
+m_scale_inputs <- lmer(death_mean_quarter ~ I(time^2) + (1 + time|name) +
+               
+            time*unitary_semi_federal +
+            time*gdp_percap +
+            time*health_index +    
+
+            time*democracy +
+            time*civil_liberty +
+              
+            time*gov_eff + 
+            time*control_corruption,
+            #time*fragility,
+            
+          data = data_scale, 
+          control = lmerControl(optimizer = "bobyqa", 
+                                optCtrl = list(maxfun = 2e5)))
+summary(m_scale_inputs) 
+```
+
+```{r m_scale_inputs, include=FALSE}
+# m_scale_inputs <- lmer(death_mean_quarter ~ time*gov_eff + 
+#             time*health_index + 
+#             time*democracy +
+#             time*civil_liberty +
+#             time*gov_index +
+#             time*unitary_federal +
+#             (1 + time|name), 
+#           data = data_scale, 
+#           control = lmerControl(optimizer = "bobyqa", 
+#                                 optCtrl = list(maxfun = 2e5)))
+# summary(m_scale_inputs) 
+```
+
+
+```{r, results='asis'}
+library(huxtable)
+library(broomExtra)
+#https://cran.r-project.org/web/packages/jtools/vignettes/summ.html#summ
+
+# to compare result of several models
+# export_summs(m_join0, 
+#              to.file = "docx", file.name = "m_join0.docx")
+```
+
+

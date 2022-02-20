@@ -1,0 +1,139 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lme4)
+library(lmerTest)
+library(interactions)
+library(nlme)
+library(performance)
+library(ggplot2)
+library(tidyr)
+library(tidyverse)
+library(stargazer)
+library(gghighlight)
+
+data_owid <- readRDS("data_owid.RDS")
+
+```
+
+
+# Create summary statistics table
+```{r}
+# report statistics: https://www.princeton.edu/~otorres/NiceOutputR.pdf
+stargazer(as.data.frame(data_owid), type="html", summary=T, summary.logical=T, summary.stat=(c("n", "mean", "sd")),
+          #covariate.labels = c("Attend college at 23", "Years schooling at 23", "Father deceased", "Offer"),
+          notes="Notes: This table presents...",
+          digits=2, notes.append = F, title="Table 1. Descriptive Statistics", 
+          out="descriptive statistics.htm") # save to htm for easy copy to word
+```
+
+# Outcome variable
+## Check Outcome's distribution
+```{r}
+describe(data$death_mean_quarter)
+qqnorm(data$death_mean_quarter, pch = 1, frame = FALSE)
+qqline(data$death_mean_quarter, col = "blue", lwd = 2)
+```
+
+## Outcome Plot
+
+
+```{r}
+library(ggrepel)
+
+# find top 5 countries with highest death in first time point 2020-04-01 
+topdeath_time0 <- data_owid %>% 
+  filter(time_month == 0) %>% arrange(desc(total_deaths_per_million)) %>% slice(1:5)
+  
+data_owid %>% 
+  ggplot(aes(time_month, total_deaths_per_million, group = name)) +
+  geom_line(color = "gray", size = .1) +
+  
+  geom_line(data = data_owid %>% 
+              filter(name %in% topdeath_time0$name), color = "#980024", size = .3) +
+  
+  # highlight name of countries started out high
+  geom_text_repel(data = topdeath_time0, 
+            aes(label = name), nudge_x = .2, segment.curvature = -0.1) +
+    labs(title = "Covid Mortality per million population\nFive countries started out with highest mortality rate", 
+         x = "Time point ()", 
+         y = "Death per million population") +
+  theme_minimal()
+geom_grepl
+
+```
+
+```{r}
+
+# find top 5 countries with highest death in last time point
+topdeath_time22 <- data_owid %>% 
+  filter(time_month == 22) %>% arrange(desc(total_deaths_per_million)) %>% slice(1:5)
+  
+data_owid %>% 
+  ggplot(aes(time_month, total_deaths_per_million, group = name)) +
+  geom_line(color = "gray", size = .1) +
+  
+# highlight name of countries ended high
+  geom_line(data = data_owid %>% 
+              filter(name %in% topdeath_time22$name), color = "purple", size = .3) +
+  
+  # highlight name of countries started out high
+  geom_text_repel(data = topdeath_time24, 
+            aes(label = name), nudge_y = -.2, segment.curvature = -0.2) +
+  
+  labs(title = "Covid Mortality per million population\nFive countries ended with highest mortality rate", 
+         x = "Time point ()", 
+         y = "Death per million population") +
+  theme_minimal()
+```
+Linear regression line for each country
+```{r}
+data_owid %>% 
+  ggplot(aes(time_month, total_deaths_per_million, group = name)) +
+  geom_point(color = "gray", size = .1) +
+  #geom_smooth(color = "red", se = FALSE, size = .2) +
+  geom_smooth(method = "lm", se = FALSE, alpha = .2, size = .1) +
+  theme_minimal()
+```
+
+
+
+# View Distribution of variables
+
+```{r}
+hist(data$civil_liberty)
+```
+
+# Correlation
+
+## Check for correlation among predictors
+```{r}
+library(Hmisc)
+# very high Collinearity bt civil liberty & democracy; gov_eff and control_corruption
+# -->  take out one in each pair
+data_cor <- data_owid[, 7:13] %>% drop_na()
+cor(data_cor)
+
+```
+## Calculate VIF - Check if any predictor are already almost explainedby other predictors 
+```{r}
+library(car)
+m_test_1 <- lm(democracy ~  gov_eff + gdp_percap + health_index + unitary_semi_federal + trust_gov,
+   data = data_owid)
+summary(m_test_1)
+
+vif(m_test_1) # value VIF < 4 is good
+```
+
+```{r}
+m_test_2 <- lm(gov_eff ~ democracy  + gdp_percap + health_index + unitary_semi_federal,
+   data = data_owid)
+summary(m_test_2)
+
+vif(m_test_2)
+```
+
