@@ -23,34 +23,42 @@ data_owid <- readRDS("data_owid.RDS")
 ```
 
 
-# Unconditional, ICC
+# Unconditional model, calculate ICC
 ```{r m0}
+# random effect. Intercept varies by clusters (name)
+# Deafault: t-tests use Satterthwaite's method . For small sample, use ddf = "Kenward-Roger" to adjusted small-sample bias. 
 m0 <- lmer(total_deaths_per_million ~ (1|name), 
                      data = data_owid, 
                      control = lmerControl(optimizer = "bobyqa", 
                                            optCtrl = list(maxfun = 2e5)))
 
 summary(m0)
+#Intercept in a model w/o predictor means the grand mean of outcome. 
 icc(m0)
 ```
+The fixed effect for the intercept means that the grand mean of Covid mortality rate per million population is 472.48 for the pooled data (all time point months in all countries). 
 
-The model implies that ...% of the variance in mortality is associated with between-country differences. In other words, within a given country, mortality rate have a ... correlation. 
+The level-1 residual variability is 299012, the level-2 random intercept variance is 291718. The intra-class correlation ICC is 291718/(291718 + 299012) =  .494, which means the model implies that 49.4% of the variance in Covid mortality is associated with between-country differences. Equivalently, on average, within a given country, Covid mortality rate has a .494 correlation.  
 
 # Linear Growth Model 
-Time was a significant predictor of mortality rate 
+This model includes both random intercepts (1) and random slopes (time_month). 
+
 ```{r m_timelinear}
 m_timelinear <- lmer(total_deaths_per_million ~ time_month + (1 + time_month|name), 
                      data = data_owid, 
                      control = lmerControl(optimizer = "bobyqa", 
                                            optCtrl = list(maxfun = 2e5)))
 summary(m_timelinear)
-confint(m_timelinear)
+#confint(m_timelinear)
 ```
+Time was a significant predictor of mortality rate. 
+Compared to the unconditional (empty) model above, the variance associated with name has been reduced from 291718 to 40218.
 
+Variance among the intercepts: 40218
+Variance among the slopes:3297
+Residual variance was substantially reduce from 299012 in the previous model to 20950 in this model that added time as a predictor. 
 
-Variance among the intercepts: 
-Variance among the slopes:
-Level 1 residual variance: 
+Correlation between slope and intercept: -0.53
 
 The model's result shows that the initial average value .  
 
@@ -133,10 +141,8 @@ data_owid %>%
 ## Method 1: 22 federal states --> not significant
 
 ```{r}
-m_unitary_federal <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) +  (time_month|name) +                                  log(gdp_percap) +
-                            time_month*scale(health_index) +
-                            
-                            time_month*unitary_federal, 
+m_unitary_federal <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) +  (time_month|name) +                                  log(gdp_percap) + health_index +
+                            time_month + unitary_federal, 
                           data = data_owid, 
                           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -149,15 +155,16 @@ In this model, the form of state organization - federal vs. unitary states - is 
 
 ```{r m_unitary_federal}
 m_unitary_semi_federal <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) +  (time_month|name) + 
-                             log(gdp_percap) + 
-                            time_month*scale(health_index) + 
-                              
-                            time_month*unitary_semi_federal, 
+                             log(gdp_percap) + health_index + 
+                              unitary_semi_federal, 
                           data = data_owid, 
                           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 summary(m_unitary_semi_federal)
 ```
 
+Considering the fixed effect results, the main effect of internal governance system (federal coded 1) is significant, p = 0.016. The model implies that, on average, compared to a state under a unitary system, a federal state has intercept higher than unitary state by 92.8 Covid death per million population, and this significantly differs from zero (t = 2.42, SE = 38.2, p = 0.016). 
+
+NOTE: when including the cross-level interaction between time and federal represents the regression of trajectory slopes on federal is not significant (gamma = , p = ). This means that the model-implied slopes do not differ in magnitude of slope between federal and unitary states. 
 
 ```{r sim_slope, unitary_federal}
  sim_slopes(m_unitary_semi_federal, pred = time_month, modx = unitary_semi_federal, 
@@ -176,7 +183,7 @@ interact_plot(m_unitary_semi_federal, pred = time_month, modx = unitary_semi_fed
  legend.main = "")
 
 ```
-
+Significant differences in intercepts, not in slopes. 
 
 Both federal models 
 ```{r}
@@ -196,28 +203,82 @@ modelsummary(list(m_unitary_federal, m_unitary_semi_federal),
 
 # Democracy
 ```{r}
-m_join_demo <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name) + 
-                       log(gdp_percap) + 
-                        time_month*scale(health_index) +
-                        
-                      time_month*unitary_semi_federal +
-                      time_month*scale(democracy),
+m_join_demo <- lmer(total_deaths_per_million ~ I(time_month^2) + (time_month|name) + 
+                       log(gdp_percap) + health_index +
+                        unitary_semi_federal +
+          time_month*scale(democracy), # when have interaction term, lower-order term is included by default. 
                      data = data_owid, 
           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
 summary(m_join_demo)
 ```
 
-# Trust
+```{r sim_slope, interaction plot, democracy}
+ sim_slopes(m_join_demo, pred = time_month, modx = democracy, 
+            data = data_owid,
+            centered = "none", cond.int=TRUE,
+  johnson_neyman = FALSE)
+
+interact_plot(m_join_demo, pred = time_month, modx = democracy,
+              data = data_owid,
+ x.label = "Time point (in month)",
+ y.label = "Mortality",
+ main.title = " ",
+ legend.main = "")
+
+```
+Accordingly, countries with high democracy started out with lower number of Covid death per million population, but its trend increases quicker. Countries with lower democracy started out at more death but its trend increases slower. In other words, higher democratic countries had less death early in the pandemic. Starting at around time point 3 (July 2020), they suffered more from Covid death compared to lower democratic countries.
+
+# Gove_eff 
+## Random slope, main effect
+Let the slope of Covid mortality to vary by country
 
 ```{r}
+m_join5 <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name)  +
+                  log(gdp_percap) + health_index + 
+           unitary_semi_federal +
+           time_month*scale(democracy) +
+           scale(gov_eff),
+          data = data_owid, 
+          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+summary(m_join5)
+```
+## random slope, interaction with slope (time)
+```{r}
+m_join6 <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name)  +
+                  log(gdp_percap) + health_index + 
+           unitary_semi_federal +
+           time_month*scale(democracy) +
+           time_month*scale(gov_eff),
+          data = data_owid, 
+          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+summary(m_join6)
+```
 
+
+## Random quadratic term
+Let the quadratic component (time square term) vary by country, main effect of government effectiveness show significant negative effect on Covid death.  
+
+```{r}
+# m_join7 <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (I(time_month^2)|name)  + log(gdp_percap) + health_index +  
+#             unitary_semi_federal +
+#             I(time_month^2)*scale(democracy) +
+#             I(time_month^2)*scale(gov_eff),
+#           data = data_owid, 
+#           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# summary(m_join7)
+
+```
+
+# Trust
+
+In a smaller sample size, both democracy and trust in government have significant negative effect on the slope of Covid mortality. 
+```{r}
 m_join_trust <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name) + 
-                       log(gdp_percap) + 
-                       
-                        time_month*unitary_semi_federal +
-                        time_month*scale(health_index) +
+                       log(gdp_percap) + health_index +
+                        unitary_semi_federal +
                         time_month*scale(democracy) +
+                        scale(gov_eff) + 
                         time_month*scale(trust_gov),
                      data = data_owid, 
           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
@@ -225,41 +286,25 @@ m_join_trust <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (
 summary(m_join_trust)
 
 ```
+In the join model with all 4 factors, democracy behave differently. High democracy started high, but get flatter slope. Low democracy started higher, then increase faster. 
 
-# Gove_eff - Joined model of all predictors  
-```{r}
-m_join5 <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (time_month|name)  +
-                  log(gdp_percap) + 
-                  
-           time_month*unitary_semi_federal +
-           time_month*scale(health_index) +  
-           time_month*scale(democracy) +
-           time_month*scale(trust_gov) +
-           time_month*scale(gov_eff),
-          data = data_owid, 
-          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
-summary(m_join5)
-```
+```{r interact_plot for democracy, small sample size}
+sim_slopes(m_join_trust, pred = time_month, modx = democracy, 
+            data = data_owid,
+            centered = "none", cond.int=TRUE,
+  johnson_neyman = FALSE)
 
-
-```{r}
-
-m_join6 <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (I(time_month^2)|name)  +
-                 # (time_month|name) + 
-                  log(gdp_percap) + 
-            I(time_month^2)*unitary_semi_federal +
-            I(time_month^2)*scale(health_index) +  
-            #time*health_index + 
-            I(time_month^2)*scale(democracy) +
-            I(time_month^2)*scale(trust_gov) +
-            I(time_month^2)*gov_eff,
-          data = data_owid, 
-          control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
-summary(m_join6)
+interact_plot(m_join_trust, pred = time_month, modx = democracy,
+              data = data_owid,
+ x.label = "Time point (in month)",
+ y.label = "Mortality",
+ main.title = " ",
+ legend.main = "")
 
 ```
 
-One unit of gov_eff goes up, the rate of change in Covid death goes down by 16.3
+
+
 
 # Create table
 
@@ -291,65 +336,7 @@ modelsummary(list(m_timesq, m_join1, m_join2, m_join3, m_join4, m_join5),
 
 https://bookdown.org/roback/bookdown-BeyondMLR/ch-lon.html#learning-objectives-8
 
-# 3. Other considerations (to be continued)
-
-## 3.1 Scaling inputs
-
-Standardizing the inputs does not change model result. 
-```{r data_scale, include=FALSE}
-data_scale <- data %>%
-
- # select(-trust_gov) %>% drop_na() %>%
-  mutate(gdp_percap = scale(gdp_percap),
-         health_index = scale(health_index),
-        
-         gov_eff = scale(gov_eff),
-         democracy = scale(democracy)
-         )
-# should scale democracy
-scale(data$democracy)[1:10]
-
-#should scale health index
-scale(data$health_index)[1:10]
-
-# gov_eff alrealy on -2.5 ~ 2.5 range. 
-data$gdp_percap[1:10]
-log(data$gdp_percap[1:10])
-```
-
-```{r}
-m_scale_inputs <- lmer(death_mean_quarter ~ I(time^2) + (1 + time|name) +
-               
-            time*unitary_semi_federal +
-            time*gdp_percap +
-            time*health_index +    
-
-            time*democracy +
-            time*civil_liberty +
-              
-            time*gov_eff + 
-            time*control_corruption,
-            #time*fragility,
-            
-          data = data_scale, 
-          control = lmerControl(optimizer = "bobyqa", 
-                                optCtrl = list(maxfun = 2e5)))
-summary(m_scale_inputs) 
-```
-
-```{r m_scale_inputs, include=FALSE}
-# m_scale_inputs <- lmer(death_mean_quarter ~ time*gov_eff + 
-#             time*health_index + 
-#             time*democracy +
-#             time*civil_liberty +
-#             time*gov_index +
-#             time*unitary_federal +
-#             (1 + time|name), 
-#           data = data_scale, 
-#           control = lmerControl(optimizer = "bobyqa", 
-#                                 optCtrl = list(maxfun = 2e5)))
-# summary(m_scale_inputs) 
-```
+# 3. Other considerations 
 
 
 ```{r, results='asis'}

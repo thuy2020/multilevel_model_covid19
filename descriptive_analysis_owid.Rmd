@@ -1,10 +1,18 @@
 ---
-title: "Untitled"
-output: html_document
+title: "Politics as Determinants of Covid mortality: Is it a matter of democracy, internal governance, government effectiveness, or trust?"
+subtitle: "Descriptive Analysis"
+author: "Thuy Nguyen"
+date: February 21, 2022
+output: 
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    toc_depth: 3
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 library(lme4)
 library(lmerTest)
 library(interactions)
@@ -15,33 +23,107 @@ library(tidyr)
 library(tidyverse)
 library(stargazer)
 library(gghighlight)
+library(psych)
 
 data_owid <- readRDS("data_owid.RDS")
 
 ```
 
+# View data
 
-# Create summary statistics table
 ```{r}
+
+DT::datatable(data_owid, fillContainer = FALSE, options = 
+                list(pageLength = 5))
+
+```
+
+
+# Summary statistics table
+
+```{r}
+round(describe(data_owid),1) %>% DT::datatable()
+```
+
+```{r}
+# list of countries used in analysis
+# list_countries <- data_owid %>% arrange(desc(total_deaths_per_million)) %>% select(name) 
+# unique(list_countries$name)
+```
+
+```{r, include=FALSE}
 # report statistics: https://www.princeton.edu/~otorres/NiceOutputR.pdf
 stargazer(as.data.frame(data_owid), type="html", summary=T, summary.logical=T, summary.stat=(c("n", "mean", "sd")),
           #covariate.labels = c("Attend college at 23", "Years schooling at 23", "Father deceased", "Offer"),
-          notes="Notes: This table presents...",
-          digits=2, notes.append = F, title="Table 1. Descriptive Statistics", 
-          out="descriptive statistics.htm") # save to htm for easy copy to word
+          notes="Notes: ",
+          digits=2, notes.append = F, title="Table 1. Descriptive Statistics") 
+         # out="descriptive statistics.htm") # save to htm for easy copy to word
 ```
 
-# Outcome variable
-## Check Outcome's distribution
+# Group size 
+
+There is some degree of imbalance on group sizes. There are 115 countries (76.2%) that have full 23 time points measurements, 20 countries with 22 measurements, 7 with 21 points, 6 with 19 points, the last 3 countries have 14, 13, 11 time points, respectively. 
 ```{r}
-describe(data$death_mean_quarter)
-qqnorm(data$death_mean_quarter, pch = 1, frame = FALSE)
-qqline(data$death_mean_quarter, col = "blue", lwd = 2)
+count <- questionr::freq(data_owid$name, cum = TRUE, total = FALSE)
+group_size <- questionr::freq(count$n, cum = TRUE, total = TRUE)
+
+group_size %>% rename("number_country" = n) %>% select(number_country)
+```
+## Distribution of time point 
+
+```{r}
+hist(count$n, 
+     main = "Histogram for number of time point per country",
+     xlab = "Number of time points", col = "lightblue", border = "white"
+     )
 ```
 
-## Outcome Plot
+# Overview of the outcome variable
+
+total_deaths_per_million
+
+```{r}
+describe(data_owid$total_deaths_per_million)
+```
 
 
+```{r}
+data_owid %>% 
+  ggplot(aes(time_month, total_deaths_per_million)) +
+  geom_point(color = "lightblue", size = .2) +
+  geom_smooth(color = "red", se = FALSE, size = .2) +
+  theme_minimal() +
+  labs(title = "Fitted line on outcome variable",
+       x = "Time point (month)", 
+       y = "Covid death per million population")
+
+```
+
+```{r}
+data_owid %>% 
+  filter(name !="Peru") %>% 
+  ggplot(aes(time_month, total_deaths_per_million)) +
+  geom_point(color = "lightblue", size = .2) +
+  geom_smooth(color = "red", se = FALSE, size = .2) +
+  theme_minimal() +
+  labs(title = "Fitted line on outcome variable (remove outlier Peru)",
+       x = "Time point (month)", 
+       y = "Covid death per million population")
+
+```
+
+Although Peru is an outlier, removing it from the data does not change much the fitted line. 
+
+## Distribution of outcome variable - highly right skewed 
+
+```{r}
+hist(data_owid$total_deaths_per_million, col = "white", border = "blue",
+     main = "Histogram for Covid mortality per million population",
+     xlab = "Covid mortality per million population")
+```
+
+
+## Top 5 countries with highest death in first time point 2020-04-01
 ```{r}
 library(ggrepel)
 
@@ -63,10 +145,11 @@ data_owid %>%
          x = "Time point ()", 
          y = "Death per million population") +
   theme_minimal()
-geom_grepl
+
 
 ```
 
+## Top 5 countries with highest death in the last time point 2022-02-01
 ```{r}
 
 # find top 5 countries with highest death in last time point
@@ -82,35 +165,145 @@ data_owid %>%
               filter(name %in% topdeath_time22$name), color = "purple", size = .3) +
   
   # highlight name of countries started out high
-  geom_text_repel(data = topdeath_time24, 
+  geom_text_repel(data = topdeath_time22, 
             aes(label = name), nudge_y = -.2, segment.curvature = -0.2) +
   
   labs(title = "Covid Mortality per million population\nFive countries ended with highest mortality rate", 
-         x = "Time point ()", 
+         x = "Time point (month)", 
          y = "Death per million population") +
   theme_minimal()
 ```
-Linear regression line for each country
+
+## Linear regression line for each country
+
 ```{r}
 data_owid %>% 
   ggplot(aes(time_month, total_deaths_per_million, group = name)) +
-  geom_point(color = "gray", size = .1) +
+  geom_point(color = "gray", size = .2) +
   #geom_smooth(color = "red", se = FALSE, size = .2) +
   geom_smooth(method = "lm", se = FALSE, alpha = .2, size = .1) +
+ # geom_smooth(position = "identity") +
+  theme_minimal() +
+  labs(title = "Fitting linear regression line for each country",
+       x = "Time point (month)", 
+       y = "Death per million population")
+
+```
+
+## View outcome by Unitary vs. Federal States
+
+```{r}
+data_owid %>% 
+ggplot(aes(time_month, total_deaths_per_million, group = name)) +
+  geom_line(size = 0.2, color = "lightblue") +
+  facet_wrap(~unitary_semi_federal) +
+  labs(title = "Covid mortaliry by systems of internal governance\n(Unitary = 0; Federal = 1)",
+       x = "Time point (month)", 
+       y = "Death per million population") +
   theme_minimal()
 ```
 
-
-
-# View Distribution of variables
+Many extreme observations in both systems. Unitary group has larger variation. Federal states have higher mean and less variance. 
 
 ```{r}
-hist(data$civil_liberty)
+boxplot(total_deaths_per_million ~ unitary_semi_federal, 
+        data = data_owid, 
+        main = "Covid death per million population by\ninternal governance system (unitary vs. federal)", col = "white", border = "darkgreen",
+        
+        ylab = "Death per million population", xlab = ""
+        )
 ```
 
-# Correlation
 
-## Check for correlation among predictors
+## Distribution of democracy
+
+```{r}
+hist(data_owid$democracy, col = "lightblue", border = "white", 
+     main = "Histogram of Democracy")
+```
+
+raw scale of democracy in full data
+
+```{r}
+describe(data_owid$democracy)
+```
+
+raw scale of democracy in subset of data of 38 countries, when include trust_gov data
+
+```{r}
+data_owid %>% 
+  filter(!is.na(trust_gov)) -> small_sample_size
+
+describe(small_sample_size$democracy)
+  
+```
+
+
+standardized scale of democracy in full data
+```{r}
+describe(scale(data_owid$democracy))
+```
+
+Join distribution of democracy and Covid mortality
+```{r}
+data_owid %>% 
+ggplot(aes(democracy, total_deaths_per_million)) +
+  geom_point(color = "gray", size = .5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Join distribution of democracy and Covid mortality (pooled data)",
+    y = "Covid mortality per million population"
+  ) +
+  theme_minimal()
+```
+
+In the pooled data, there is a positive relationship between democracy and Covid mortality rate. Note that this is total effect that is ignoring measurement nested in country unit. 
+
+## Distribution of trust in government 
+```{r}
+hist(data_owid$trust_gov, col = "#CA908B", border = "white", 
+     main = "Histogram of Trust in government")
+```
+
+raw scale
+```{r}
+describe(data_owid$trust_gov)
+```
+
+standardized scale
+
+```{r}
+describe(scale(data_owid$trust_gov))
+```
+
+Note that number of countries that have data on trust in government is only limited to 38, compared to the bigger sample size of 151 countries above. Democracy in this subset ranges from 31.1 (Russia) to 98.7 (Norway). View summary of democracy in this smaller sample. 
+
+```{r}
+data_owid %>% 
+  filter(!is.na(trust_gov)) %>% select(democracy) %>% describe()
+```
+
+
+
+## Distribution of government effectiveness 
+
+
+```{r}
+hist(data_owid$gov_eff, col = "#71AB7E", border = "white", 
+     main = "Histogram of Trust in government")
+```
+
+raw scale
+```{r}
+describe(data_owid$gov_eff)
+```
+
+standardized scale
+```{r}
+describe(scale(data_owid$gov_eff))
+```
+
+# Check for correlation among predictors
 ```{r}
 library(Hmisc)
 # very high Collinearity bt civil liberty & democracy; gov_eff and control_corruption
@@ -119,21 +312,33 @@ data_cor <- data_owid[, 7:13] %>% drop_na()
 cor(data_cor)
 
 ```
-## Calculate VIF - Check if any predictor are already almost explainedby other predictors 
+
+# Calculate variance inflation factor (VIF) to dectects multicollinearity 
+
+Check if any predictor are already largely explained by other predictors. Result: All VIF are smaller than 10, the limit value often recommended as a good limit.
+
+## Democracy ~ other predictors 
 ```{r}
 library(car)
 m_test_1 <- lm(democracy ~  gov_eff + gdp_percap + health_index + unitary_semi_federal + trust_gov,
    data = data_owid)
-summary(m_test_1)
-
 vif(m_test_1) # value VIF < 4 is good
 ```
 
+## Government effectiveness ~ other predictors 
 ```{r}
 m_test_2 <- lm(gov_eff ~ democracy  + gdp_percap + health_index + unitary_semi_federal,
    data = data_owid)
-summary(m_test_2)
-
 vif(m_test_2)
+```
+## Trust_gov ~ other predictors 
+```{r}
+vif(lm(trust_gov ~ democracy + gov_eff + gdp_percap + health_index + unitary_semi_federal,
+   data = data_owid))
+```
+## Federal ~ other predictors 
+```{r}
+vif(lm(unitary_semi_federal ~ trust_gov + democracy + gov_eff + gdp_percap + health_index,
+   data = data_owid))
 ```
 

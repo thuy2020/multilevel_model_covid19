@@ -95,8 +95,8 @@ death_owid <- rio::import(here::here("data", "owid-covid-data.csv")) %>%
          month = month(date),
          year = year(date)) %>% 
     filter(date == ceiling_date(date, "month")) %>% arrange(desc(date)) %>% 
-    mutate(leng_iso = nchar(iso_code)) %>% 
-    filter(leng_iso == 3) %>% 
+    mutate(leng_iso = nchar(iso_code)) %>% # not getting continents or regions 
+    filter(leng_iso == 3) %>% # countries code has 3 letters 
     
     
      # adding timepoint  - month
@@ -118,8 +118,9 @@ death_owid <- rio::import(here::here("data", "owid-covid-data.csv")) %>%
                                 year == 2021 & month == 12 ~ 24, 
                                 year == 2022 & month == 1 ~ 25, 
                                 year == 2022 & month == 2 ~ 26,)) %>% 
-     mutate(time_month = time_month - 4)   # center month 0 at 2020-04-01, original data started at 2020-02-01 - only have 1 point for that (China): month 2020-03-01 only have 10 countries 
-  
+     mutate(time_month = time_month - 4) %>%   # center month 0 at 2020-04-01, original data started at 2020-02-01 - only have 1 point for that (China): month 2020-03-01 only have 10 countries 
+    filter(time_month >= 0)
+death_owid %>% filter(iso_code == "USA")
 ```
 
 
@@ -164,36 +165,23 @@ df_datasets <- get_metadata360(metadata_type = 'datasets') %>%
 # get world_development_indicators id = 56
 
 gdp_percap <- get_data360(dataset_id = 56) %>% 
-  select(c(`Country ISO3`, `Country Name`, Indicator, `2017`)) %>% 
+  select(c(`Country ISO3`, `Country Name`, Indicator, `2019`)) %>% 
   filter(Indicator =="GDP per capita (current US$)") %>% 
-  rename("gdp_percap" = `2017`,
+  rename("gdp_percap" = `2019`,
          "iso3" = `Country ISO3`) %>% 
   select(-Indicator) 
 
 # get Quality of Govt 88
 
-gov_effectiveness_corruption <- get_data360(dataset_id = 88) %>% 
+gov_effectiveness <- get_data360(dataset_id = 88) %>% 
 select(c(`Country ISO3`, `Country Name`, Indicator, `2019`)) %>%
-  
-  filter(Indicator == "Government Effectiveness, Estimate" |
-        Indicator == "Control of Corruption, Estimate") %>%   # 190
+  filter(Indicator == "Government Effectiveness, Estimate") %>%   # 190
   pivot_wider(names_from = Indicator,
               values_from = `2019`) %>% 
 
- rename("control_corruption" = `Control of Corruption, Estimate`, 
-          "gov_eff" = `Government Effectiveness, Estimate`,
+ rename("gov_eff" = `Government Effectiveness, Estimate`,
         "iso3" = `Country ISO3`) 
 
-# May consider other indicators:
-# Indicator == "Control of Corruption, Estimate"| #190
-# indicators <- c("Government Effectiveness, Estimate",
-# "Political corruption index",
-# "Overall Governance",
-# "Corruption Perceptions Index",
-# "Human Development Index",
-# "Control of Corruption, Estimate",
-# )
-summary(gov_effectiveness_corruption)
 ```
 
 # Federal vs. Unitary States / System of Internal Governance 
@@ -223,22 +211,22 @@ trust <- import(here::here("data", "DP_LIVE_24052021010135721.csv")) %>%
 # Fragile States Index data from 2006-2018.
 ```{r}
 #https://fragilestatesindex.org/data/
-
-fsi2019 <- import(here("data", "fsi-2019.xlsx")) %>% 
-  rename(name = Country, 
-         fragility = Total) %>% 
-  select(name, fragility)
+# 
+# fsi2019 <- import(here("data", "fsi-2019.xlsx")) %>% 
+#   rename(name = Country, 
+#          fragility = Total) %>% 
+#   select(name, fragility)
 ```
 
 # Joining data - Using death data from OWID
 ```{r}
-data_owid <- death_owid %>% rename(iso3 = iso_code, name = location) %>% select(-c(date, leng_iso, month, year)) %>% #filter(location == "United Kingdom")
+data_owid <- death_owid %>% rename(iso3 = iso_code, name = location) %>% select(-c(date, leng_iso)) %>% #filter(location == "United Kingdom")
   left_join(gdp_percap) %>%  
-  left_join(gov_effectiveness_corruption) %>%
+  left_join(gov_effectiveness) %>%
   left_join(democracy) %>% 
   left_join(health_index, by = c("name" = "Country")) %>% 
     left_join(trust) %>% 
-  select(c(iso3, name, time_month, total_deaths, total_deaths_per_million, population,gdp_percap, democracy, gov_eff, health_index, trust_gov)) %>% 
+  select(c(iso3, name, time_month, total_deaths, total_deaths_per_million, population,gdp_percap, democracy, gov_eff, health_index, trust_gov, month, year)) %>% 
  
   # coding unitary_federal - Method 1
     mutate(unitary_federal= case_when(name %in% federal ~ 1,
@@ -250,31 +238,12 @@ data_owid <- death_owid %>% rename(iso3 = iso_code, name = location) %>% select(
 
 summary(data_owid)
 
-data_owid %>% 
-ggplot(aes(time_month, total_deaths_per_million, group = name)) +
-  geom_line() +
-  facet_wrap(~unitary_semi_federal)
-
-# list of countries used in analysis
-list_countries <- data_owid %>% arrange(desc(total_deaths_per_million)) %>% select(name) 
-unique(list_countries$name)
-
-# list of federal
-
-data_owid %>% 
-  filter(unitary_semi_federal == 1) %>% distinct(name) -> f1
-
-data_owid %>% 
-  filter(unitary_federal == 1) %>% distinct(name) -> f2
-
-setdiff(f1, f2) -> f3
-
 saveRDS(data_owid, "data_owid.RDS")
 ```
 
 
 
-# Joining data
+# Joining data - Outcome from Havard Chan
 ```{r joining data}
 data <- death_outcome %>% #distinct(Country_Region) %>% count() # 196
     left_join(gdp_percap) %>% 
@@ -296,7 +265,6 @@ data <- death_outcome %>% #distinct(Country_Region) %>% count() # 196
 
 # limit to only some variables to be used in model
   select(name, time, death_mean_quarter, gdp_percap, gov_eff, democracy, 
-         #control_corruption, civil_liberty, fragility, (high correlation with others)
          health_index, unitary_federal, unitary_semi_federal, trust_gov) %>% 
   drop_na(name) %>% 
   distinct()
