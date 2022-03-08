@@ -1,0 +1,70 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+```
+
+
+```{r}
+#https://fragilestatesindex.org/data/
+
+fsi2019 <- rio::import(here::here("data", "fsi-2019.xlsx")) %>%
+  rename(name = Country,
+         fragility = Total) %>%
+  select(name, fragility)
+```
+```{r}
+library(fixest)
+library(psych)
+data_owid <- readRDS("data_owid.RDS")
+resource <- read_csv(here::here("data", "API_NY.GDP.TOTL.RT.ZS_DS2_en_csv_v2_3731649.csv"), skip = 3)
+
+instrument <- resource %>% 
+  select(`Country Name`, `Country Code`, `2019`) %>% 
+  filter(`Country Code` %in% data_owid$iso3) %>% 
+  rename(perc_gpd_resource = `2019`, 
+         iso3 = `Country Code`) %>% 
+  mutate(perc_gpd_resource = round(perc_gpd_resource, 3)) %>% arrange(desc(perc_gpd_resource))
+
+data_causal <- left_join(data_owid, instrument) %>% 
+  left_join(fsi2019) %>% 
+  filter(time_month == 22) %>% 
+  select(name, perc_gpd_resource, fragility, total_deaths_per_million, gdp_percap) %>% drop_na()
+
+cor(data_causal$fragility, data_causal$perc_gpd_resource)
+
+cor(data_causal$fragility, data_causal$total_deaths_per_million)
+
+
+mod1 <- lm(fragility ~ perc_gpd_resource + gdp_percap, data = data_causal)
+summary(mod1)
+
+data_causal$pred <- predict(mod1)
+
+mod2 <- lm(total_deaths_per_million ~ pred + gdp_percap, data = data_causal)
+summary(mod2)
+
+
+data_causal %>% select(name, fragility) %>% arrange(fragility)
+describe(data_causal$fragility)
+```
+
+```{r}
+data_70 <- data_causal %>% filter(fragility >=70)
+mod3 <- lm(fragility ~ perc_gpd_resource + gdp_percap, data = data_70)
+summary(mod3)
+
+data_70$pred <- predict(mod3)
+
+mod4 <- lm(total_deaths_per_million ~ pred + gdp_percap, data = data_70)
+summary(mod4)
+
+
+data_causal %>% select(name, fragility) %>% arrange(fragility)
+```
+
