@@ -1,7 +1,7 @@
 ---
-title: "Politics as Determinants of Covid mortality: Is it a matter of democracy, internal governance, government effectiveness, or trust?"
+title: "Politics as Determinants of Covid mortality"
 subtitle: "Descriptive Analysis"
-author: "Thuy Nguyen"
+author: ""
 date: February 21, 2022
 output: 
   html_document:

@@ -95,20 +95,10 @@ anova(m_timelinear_FIML, m_timesq_FIML)
 ```
 
 
-
 # Testing for Heteroscedastic Errors --> Need to account for heteroscedasticity. 
 
 ```{r}
 # to override the default homoscedastic error structure for level 1 residuals, need to use nlme; Note that lme4 does not allow for testing of the homoscedasticity assumption. 
-
-m_test_homo1 <- nlme::lme(total_deaths_per_million ~ time_month + 1,
-          data = data_owid, 
-          random = ~ time_month + 1|name) # random effect of time and intercept 1 --> dependent on name
-summary(m_test_homo1)
-intervals(m_test_homo1)
-```
-
-```{r}
 m_test_homo2 <- nlme::lme(total_deaths_per_million ~ time_month + 1,
           data = data_owid, 
           random = ~ time_month + 1|name,   # random effect of time and intercept 1 --> dependent on name
@@ -119,23 +109,22 @@ summary(m_test_homo2)
 intervals(m_test_homo2)
 ```
 
-```{r}
-anova(m_test_homo1, m_test_homo2)
-```
 
 # System of Internal Governance: Unitary, Semi-federal, Federal states  
 
 ```{r}
 # list of federal
+# including semi-federal
 data_owid %>% 
   filter(unitary_semi_federal == 1) %>% distinct(name) -> f1
 
+# NOT including semi-federal
 data_owid %>% 
   filter(unitary_federal == 1) %>% distinct(name) -> f2
 
+# differences between 2 lists
 setdiff(f1, f2) -> f3
-data_owid %>% 
-  filter(unitary_federal == 1) %>% select()
+f3
 ```
 
 ## Method 1: 22 federal states --> not significant
@@ -256,20 +245,6 @@ summary(m_join6)
 ```
 
 
-## Random quadratic term
-Let the quadratic component (time square term) vary by country, main effect of government effectiveness show significant negative effect on Covid death.  
-
-```{r}
-# m_join7 <- lmer(total_deaths_per_million ~ time_month + I(time_month^2) + (I(time_month^2)|name)  + log(gdp_percap) + health_index +  
-#             unitary_semi_federal +
-#             I(time_month^2)*scale(democracy) +
-#             I(time_month^2)*scale(gov_eff),
-#           data = data_owid, 
-#           control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
-# summary(m_join7)
-
-```
-
 # Trust
 
 In a smaller sample size, both democracy and trust in government have significant negative effect on the slope of Covid mortality. 
@@ -304,14 +279,32 @@ interact_plot(m_join_trust, pred = time_month, modx = democracy,
 ```
 
 
-
-
 # Create table
+
+```{r}
+modelsummary(m_unitary_semi_federal, 
+               title = "Table 1. ",
+               stars=c('*' = 0.05, '**' = 0.01, '***' = 0.001),
+               coef_omit = "(Intercept)|as.factor",
+               coef_rename = c("health_index" = "Health Security Index", 
+                               "unitary_semi_federal" = "Federal system (Yes = 1)",
+                               
+                               "log(gdp_percap)" = "GDP per capita (log)",
+                               "time" = "Time point (quarter)"
+                               ),
+               estimate = "{estimate}{stars}",
+               gof_omit= "Adj|Log|Within|AIC|BIC|FE|Std|F",
+               #add_rows = row,
+               threeparttable= T,
+               notes = c("* p < 0.05, ** p < 0.01, *** p < 0.001 Notes: Standard errors shown in parentheses."),
+               output = "model1.docx")
+```
+
 
 ```{r}
 
 # Produce the table; can export to markdown, tex, etc. by changing the type
-modelsummary(list(m_timesq, m_join1, m_join2, m_join3, m_join4, m_join5), 
+modelsummary(list(m_unitary_semi_federal, m_join_demo, m_join5, m_join_trust), 
                title = "Table 1. ",
                stars=c('*' = 0.05, '**' = 0.01, '***' = 0.001),
                coef_omit = "(Intercept)|as.factor",
@@ -328,25 +321,8 @@ modelsummary(list(m_timesq, m_join1, m_join2, m_join3, m_join4, m_join5),
                #add_rows = row,
                threeparttable= T,
                notes = c("* p < 0.05, ** p < 0.01, *** p < 0.001 Notes: Standard errors shown in parentheses."),
-               output = "modelstable.html")
+               output = "modelstable.docx")
 
-```
-
-# Structure Error
-
-https://bookdown.org/roback/bookdown-BeyondMLR/ch-lon.html#learning-objectives-8
-
-# 3. Other considerations 
-
-
-```{r, results='asis'}
-library(huxtable)
-library(broomExtra)
-#https://cran.r-project.org/web/packages/jtools/vignettes/summ.html#summ
-
-# to compare result of several models
-# export_summs(m_join0, 
-#              to.file = "docx", file.name = "m_join0.docx")
 ```
 
 
